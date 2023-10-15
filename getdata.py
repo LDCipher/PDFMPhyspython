@@ -5,10 +5,26 @@ class DataSet(object):
         self.flavours = []
         self.F = []
 
+    def split_data(self, Q_in: float, flav_in: float):
+        # given Q value and falvour value give all x
+        # flavour is defined by:
+        flav_index = self.flavours.index(flav_in)
+        Q_index = self.Qs.index(Q_in)
+
+        x_values = []
+        # loop over F
+        for i in range(Q_index, len(self.F), len(self.Qs)):
+            x_values.append(self.F[i][flav_index])
+        return x_values
+
+
 def get_array(line):
     temp = line.strip()
     temp = temp.split(' ')
-    return temp
+    temp_out = []
+    for i in range(0, len(temp)):
+        temp_out.append(float(temp[i]))
+    return temp_out
 
 
 def process_file(file_path):
@@ -41,7 +57,6 @@ def process_file(file_path):
                     if tempDataset != None:
                         print("Update")
                         AllDatasets.append(tempDataset)
-                        temp_F = []
                     tempDataset = DataSet()
                     j = 0
                 if j == 1:
@@ -51,10 +66,7 @@ def process_file(file_path):
                 elif (j == 3):
                     tempDataset.flavours = get_array(line)
                 elif j > 3:
-                    temp_F += get_array(line)
-                    if ((j - 3) % (len(tempDataset.Qs)) == 0):
-                        tempDataset.F.append(temp_F)
-                        temp_F = []
+                    tempDataset.F.append(get_array(line))
 
             j += 1
             i += 1
@@ -66,21 +78,13 @@ def main():
     DataSets = []
     DataSets = process_file(file_path)
 
-    for dataset in DataSets:
-        #print(f'x is : {dataset.x}')
-        #print(f'Q is : {dataset.Qs}')
-        #print(f'flavour is : {dataset.flavours}')
-        #print(f'F is: {dataset.F}')
-        print(len(dataset.x))
-        print(len(dataset.F)) # 127
-        print(len(dataset.F[0])) # 44
-        print(len(dataset.F[1]))
-        print(len(dataset.F[2]))
-        print(" ")
+    print(f'x is : {DataSets[1].x}')
+    print(f'Q is : {DataSets[1].Qs}')
+    print(f'flavour is : {DataSets[1].flavours}')
+    print(f'F is: {DataSets[1].F}')
+    print(f'x_values: {DataSets[1].split_data(1.4, 21)}')
 
-        print(dataset.F[0][:20])
-        print(dataset.F[1][:20])
-        print(dataset.F[2][:20])
+    # print F for given flavour and Q
 
 
 main()
