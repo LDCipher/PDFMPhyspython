@@ -1,10 +1,9 @@
 import numpy as np
-from scipy.optimize import curve_fit
-from scipy.special import binom
 import matplotlib.pyplot as plt
 import h5py
 from iminuit import Minuit
 from iminuit.cost import UnbinnedNLL
+from scipy.special import binom
 
 
 def add(a, b):
@@ -16,7 +15,6 @@ def tsk(k, a):
 
 
 def bt(t, p_0, p_1, p_2):
-    # P0, P1, P2 are vectors i.e. [x,y]
     a = add(tsk(1 - t, p_0), tsk(t, p_1))
     a = tsk(1 - t, a)
 
@@ -35,17 +33,12 @@ class CLF(object):
         self.newData = []
 
     def quadratic_bezier_curve(self, interval):
-        # print(1 / interval)
-
         for counter in range(1, len(self.data) - 1, 3):
-            # print("HEY!")
-            # print("counter: ",counter)
             p0 = self.data[counter - 1]
             p1 = self.data[counter]
             p2 = self.data[counter + 1]
             t = 0
             for i in range(0, int(1 / interval)):
-                # singular point assignment
                 self.newData.append(bt(t, p0, p1, p2))
                 t += interval
 
@@ -56,6 +49,20 @@ class CLF(object):
             x.append(point[0])
             y.append(point[1])
         return x, y
+
+
+class LikelihoodFunction:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __call__(self, *params):
+        af, bf, cf, alpha, *p = params
+        return -np.sum(np.log(bezier_fit_function(self.x, af, bf, cf, alpha, *p)))
+
+
+def bernstein_basis_function(y, i, n):
+    return (binom(n, i)) * (y ** i) * ((1 - y) ** (n - i))
 
 
 def bezier_fit_function(x, *args):
@@ -70,10 +77,6 @@ def bezier_fit_function(x, *args):
 
     f = (af * (x ** bf) * ((1 - x) ** cf)) * temp
     return f
-
-
-def bernstein_basis_function(y, i, n):
-    return (binom(n, i)) * (y ** i) * ((1 - y) ** (n - i))
 
 
 def calculate_bezier(x_values, xf_values, interval):
@@ -96,32 +99,36 @@ def plot_data(xf_values, x_values, min_val, max_val, q_value, flavour_value, int
     min_err = xf_values - min_val
     max_err = max_val - xf_values
 
-    # Fit bezier function to curve
-    temp = np.array(np.zeros(int(n + 4)))
-    temp[[1, 2, 3]] = [-0.5, 0.5, 0.5]
-    bounds_0 = np.array(np.ones(int(n + 4)) * -1 * np.inf)
-    bounds_0[[0, 2, 3]] = [0, np.negative(n), 0]
-    bounds_1 = np.array(np.ones(int(n + 4)) * np.inf)
-    bounds_1[[1]] = [0]
-    bounds = [bounds_0, bounds_1]
-    popt, _ = curve_fit(bezier_fit_function, x[mask], y[mask], p0=temp, bounds=bounds)
+    # Define the likelihood function
+    def likelihood(af, bf, cf, alpha, *p):
+        return -np.sum(np.log(bezier_fit_function(x[mask], af, bf, cf, alpha, *p)))
+
+    # Minuit fitting
+    initial_values = [1] * (n + 5)  # 4 parameters (af, bf, cf, alpha) + n+1 additional parameters
+    initial_values[1] = -0.5
+    initial_values[2] = 0.5
+    initial_values[3] = 0.5
+
+    m = Minuit(likelihood, *initial_values, name=('af', 'bf', 'cf', 'alpha') + tuple(f'param{i}' for i in range(n + 1)))
+    m.limits[0] = (0, None)
+    m.limits[1] = (None, 0)
+    m.limits[2] = (np.negative(n), None)
+    m.limits[3] = (0, None)
+    m.migrad()
 
     # Fitted data
     fitted_x = np.array(x)
-    fitted_y = bezier_fit_function(fitted_x, *popt)
+    fitted_y = bezier_fit_function(fitted_x, *m.values)
 
     # Plot data
-
     plt.figure()
-    plt.plot(x, y, label='Bezier Curve', color='y')
+    # plt.plot(x, y, label='Bezier Curve', color='y')
     plt.plot(fitted_x, fitted_y, label='Fitted Bezier', color='r')
-    plt.errorbar(x_values, xf_values, yerr=[min_err, max_err], fmt='|', label='Data', color='b')
+    # plt.errorbar(x_values, xf_values, yerr=[min_err, max_err], fmt='|', label='Data', color='b')
     plt.xlabel('x')
     plt.ylabel('xf(x,Q²)')
-    plt.xlim(np.amin(x_values), np.amax(x_values))
-    plt.ylim(np.amin(xf_values), np.amax(xf_values))
-    # plt.xlim(0.1, 1)
-    # plt.ylim(0, 1)
+    # plt.xlim(np.amin(x_values), np.amax(x_values))
+    # plt.ylim(np.amin(xf_values), np.amax(xf_values))
     plt.xscale('log')
     plt.title('Q value: ' + str(q_value) + ' GeV\nFlavour value: down quark')
     plt.legend()
@@ -148,7 +155,7 @@ def plot_data(xf_values, x_values, min_val, max_val, q_value, flavour_value, int
     plt.legend()
     plt.show()
 
-    return popt, (x, y)
+    return m.values, (x, y)
 
 
 def read_datasets_from_h5py(file_path, q_value, flv_value):
